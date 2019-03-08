@@ -1,0 +1,7 @@
+1) Flash zephyr firmware to nrf52840 dongle: https://devzone.nordicsemi.com/f/nordic-q-a/43087/hciconfig-is-not-showing-my-nrf52840-dongle-on-my-linux-terminal
+this makes it compatible with bluez
+
+1b) maybe install bluez, it might be included with bluepy
+
+2) Install bluepy: https://github.com/IanHarvey/bluepy 
+this has some magic to enable connecting to Thingy with bluez
