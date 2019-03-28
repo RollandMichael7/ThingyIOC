@@ -1,0 +1,20 @@
+# Database for Nordic thingy:52
+
+# Read UUID
+record(aSub, "$(Sys)$(Dev)$(Attr)Reader") {
+	field(DESC,	"$(Attr) reader")
+	field(EFLG,	"ON CHANGE")
+	field(SNAM,	"readUUID")
+	field(INPA,	"0")
+	field(INPB,	$(UUID))
+	field(FTA,	"STRING")
+	field(FTB,	"STRING")
+	field(OUTA,	"$(Sys)$(Dev)$(Attr)")
+	field(FTVA,	"STRING")	
+}
+
+# Receive UUID reading
+record(waveform, "$(Sys)$(Dev)$(Attr)") {
+	field(DESC,	"$(Attr)")
+	field(FTVL,	"STRING")
+}
