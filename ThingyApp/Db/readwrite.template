@@ -11,6 +11,7 @@ record(aSub, "$(Sys)$(Dev)$(Attr)Reader") {
 	field(FTB,	"STRING")
 	field(OUTA,	"$(Sys)$(Dev)$(Attr)")
 	field(FTVA,	"STRING")	
+	field(FLNK,	"$(Sys)$(Dev)$(Attr)")
 }
 
 # Receive UUID reading

@@ -6,8 +6,7 @@
 #include <ctype.h>
 #include <math.h>
 #include <pthread.h>
-
-#include <sys/mman.h>
+#include <inttypes.h>
 
 #include <dbAccess.h>
 #include <dbDefs.h>
@@ -29,9 +28,19 @@ gatt_connection_t *gatt_connection = 0;
 //static EVENTPVT event;
 
 #define TEMP_UUID "0201"
+#define PRESSURE_UUID "0202"
 #define HUMIDITY_UUID "0203"
+#define AIRQUAL_UUID "0204"
+#define LED_UUID "0301"
 #define BUTTON_UUID "0302"
 #define ORIENTATION_UUID "0403"
+
+#define LED_OFF 0
+#define LED_CONSTANT 1
+#define LED_BREATHE 2
+#define LED_ONCE 3
+
+static char *led_colors[7] = {"Red", "Green", "Yellow", "Blue", "Purple", "Cyan", "White"};
 
 typedef struct {
 	char uuid_str[35];
@@ -46,32 +55,51 @@ static gatt_connection_t *get_connection() {
 	return gatt_connection;
 }
 
-static void writePV_callback(const uuid_t *uuid, const uint8_t *data, size_t len, void *user_data) {
+static void writePV_callback(const uuid_t *uuidObject, const uint8_t *data, size_t len, void *user_data) {
 	NotifyArgs *args = (NotifyArgs *) user_data;
 	aSubRecord *pv = args->pv;
-	if (strcmp(args->uuid_str, ORIENTATION_UUID) == 0) {
+	char *uuid = args->uuid_str;
+
+	if (strcmp(uuid, TEMP_UUID) == 0) {
+		float x= data[0] + (float)(data[1]/100.0);
+		memcpy(pv->vala, &x, sizeof(float));
+	}
+	else if (strcmp(uuid, PRESSURE_UUID) == 0) {
+		int32_t n = (data[0]) | (data[1] << 8) | (data[2] << 16) | (data[3] << 24);
+		float x = n + (float)data[4]/100.0;
+		memcpy(pv->vala, &x, sizeof(float));
+	}
+	else if (strcmp(uuid, HUMIDITY_UUID) == 0 || strcmp(uuid, BUTTON_UUID) == 0) {
+		float n = data[0];
+		memcpy(pv->vala, &n, sizeof(float));
+	}
+	else if (strcmp(uuid, AIRQUAL_UUID) == 0) {
+		uint16_t co = (data[0]) | (data[1] << 8);
+		char buf1[32];
+		snprintf(buf1, sizeof(buf1), "%" PRIu16 " eCO2 ppm\n", co);
+		uint16_t tvoc = (data[2]) | (data[3] << 8);
+		char buf2[32];
+		snprintf(buf2, sizeof(buf2), "%" PRIu16 " TVOC ppb", tvoc);
+		char buf3[64];
+		strncat(buf3, buf1, sizeof(buf1));
+		strncat(buf3, buf2, sizeof(buf2));
+		//printf("%s\n", buf3);
+		strcpy(pv->vala, buf3);
+	}
+	else if (strcmp(uuid, ORIENTATION_UUID) == 0) {
 		int n=data[0];
-		if (data == 0)
+		if (n == 0)
 			strcpy(pv->vala, "Portrait");
-		else if (data == 1)
+		else if (n == 1)
 			strcpy(pv->vala, "Landscape");
-		else if (data == 2)
+		else if (n == 2)
 			strcpy(pv->vala, "Reverse Portrait");
-		else if (data == 3)
+		else if (n == 3)
 			strcpy(pv->vala, "Reverse Landscape");
 		else
 			strcpy(pv->vala, "UNKNOWN");
 	}
-	else {
-		float x=0;
-		for (int i=0; i < len; i++) {
-			if (i == 0)
-				x += (float) (data[i]);
-			else
-				x += (float) (data[i]/100.0);
-		}
-		memcpy(pv->vala, &x, sizeof(float));
-	}
+	scanOnce(pv);
 	//postEvent(event);
 }
 
@@ -146,21 +174,55 @@ static long readUUID(aSubRecord *paSub) {
 	uuid_t uuid = thingyUUID(input);
 	
 	char byte[4];
-	char uuid_buf[100];
+	char data[100];
 	char out_buf[100];
 	memset(out_buf, 0, sizeof(out_buf));
-	size_t len = sizeof(uuid_buf);
-	if (gattlib_read_char_by_uuid(conn, &uuid, uuid_buf, &len) == -1) {
+	size_t len = sizeof(data);
+	if (gattlib_read_char_by_uuid(conn, &uuid, data, &len) == -1) {
 		printf("Read of uuid %s failed.\n", input);
 		return 1;
 	}
 	else {
-		for (i=0; i < len; i++) {
-			snprintf(byte, sizeof(byte), "%02x ", uuid_buf[i]);
-			strcat(out_buf, byte);
+		if (strcmp(input, LED_UUID) == 0) {
+			int mode = (int) data[i];
+			if (mode == LED_OFF) {
+				char buf[4] = "Off";
+				memcpy(paSub->vala, buf, strlen(buf));
+			}
+			else if (mode == LED_CONSTANT) {
+				uint8_t red = (uint8_t) data[1];
+				uint8_t green = (uint8_t) data[2];
+				uint8_t blue = (uint8_t) data[3];
+				char buf[25];
+				snprintf(buf, sizeof(buf), "Constant R%dG%dB%d", red, green, blue);
+				memcpy(paSub->vala, buf, strlen(buf));
+			}
+			else if (mode == LED_BREATHE) {
+				int i = (int) data[1];
+				char color[10];
+				strcpy(color, led_colors[i-1]);
+				int intensity = (int) data[2];
+				//uint16_t interval = ( (uint8_t) data[3] << 8) + ( (uint8_t) data[4]);
+				int interval = (int) data[3];
+				char buf[100];
+				snprintf(buf, sizeof(buf), "Breathe %s\nIntensity: %d Interval: %d", color, intensity, interval);
+				memcpy(paSub->vala, buf, strlen(buf));
+			}
+			else if (mode == LED_ONCE) {
+				char buf[20] = "One shot";
+				memcpy(paSub->vala, buf, strlen(buf));
+			}
+			else
+				printf("LED unknown?!?\n");
 		}
-		//printf("%s\n", out_buf);
-		memcpy(paSub->vala, out_buf, strlen(out_buf));
+		else {
+			for (i=0; i < len; i++) {
+				snprintf(byte, sizeof(byte), "%02x ", data[i]);
+				strcat(out_buf, byte);
+			}
+			//printf("%s\n", out_buf);
+			memcpy(paSub->vala, out_buf, strlen(out_buf));
+		}
 	}
 	return 0;
 }

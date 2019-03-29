@@ -1,0 +1,10 @@
+file "notifyNumber.template"
+{
+pattern { Sys, 	Dev  		  ,	Attr 		 , Units,	UUID,}
+{ "XF:10IDB",	"{THINGY:001}",	"Temperature", "C",		"201"}
+{ "XF:10IDB",	"{THINGY:001}",	"Pressure",    "hPa",	"202"}
+{ "XF:10IDB",	"{THINGY:001}",	"Humidity",    "%",		"203"}
+
+{ "XF:10IDB", 	"{THINGY:001}",	"Button",	   "",		"302"}
+
+}

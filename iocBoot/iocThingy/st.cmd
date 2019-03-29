@@ -7,8 +7,9 @@ dbLoadDatabase "$(TOP)/dbd/thingy.dbd"
 thingy_registerRecordDeviceDriver pdbbase
 
 ## Load record instances
-dbLoadRecords "$(TOP)/db/notify.db"
+dbLoadRecords "$(TOP)/db/notifyNumber.db"
+dbLoadRecords "$(TOP)/db/notifyString.db"
 dbLoadRecords "$(TOP)/db/readwrite.db"
 
 iocInit
-dbpf("XF:10IDB{THINGY:001}TemperatureNotifier.SCAN","1 second")
+dbpf("XF:10IDB{THINGY:001}LEDReader.SCAN","1 second")
