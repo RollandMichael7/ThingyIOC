@@ -1,6 +1,7 @@
 file "notifyString.template"
 {
 pattern { Sys, 	Dev  		  ,	Attr 		 ,		UUID}
+#{ "XF:10IDB", 	"{THINGY:001}",	"AirQuality" ,		"204"}
 { "XF:10IDB", 	"{THINGY:001}",	"Orientation",		"403"}
-{ "XF:10IDB", 	"{THINGY:001}",	"AirQuality" ,		"204"}
+#{ "XF:10IDB",	"{THINGY:001}",	"RotationMatrix",	"408"}
 }

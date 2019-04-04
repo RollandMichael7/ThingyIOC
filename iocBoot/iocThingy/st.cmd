@@ -2,6 +2,7 @@
 
 < envPaths
 
+
 ## Register all support components
 dbLoadDatabase "$(TOP)/dbd/thingy.dbd"
 thingy_registerRecordDeviceDriver pdbbase

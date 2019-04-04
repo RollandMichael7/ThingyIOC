@@ -7,6 +7,7 @@
 #include <math.h>
 #include <pthread.h>
 #include <inttypes.h>
+#include <signal.h>
 
 #include <dbAccess.h>
 #include <dbDefs.h>
@@ -24,8 +25,9 @@
 #include "gattlib.h"
 
 
+#define MAC_ADDRESS "D3:69:D6:BA:E3:31"
+
 gatt_connection_t *gatt_connection = 0;
-//static EVENTPVT event;
 
 #define TEMP_UUID "0201"
 #define PRESSURE_UUID "0202"
@@ -34,6 +36,10 @@ gatt_connection_t *gatt_connection = 0;
 #define LED_UUID "0301"
 #define BUTTON_UUID "0302"
 #define ORIENTATION_UUID "0403"
+#define EULER_UUID "0407"
+#define ROTATION_UUID "0408"
+#define HEADING_UUID "0409"
+#define GRAVITY_UUID "040A"
 
 #define LED_OFF 0
 #define LED_CONSTANT 1
@@ -48,11 +54,21 @@ typedef struct {
 	uuid_t uuid;
 } NotifyArgs;
 
+static void disconnect();
+
 static gatt_connection_t *get_connection() {
 	if (gatt_connection != 0)
 		return gatt_connection;
-	gatt_connection = gattlib_connect(NULL, "D3:69:D6:BA:E3:31", BDADDR_LE_PUBLIC, BT_SEC_LOW, 0, 0);
+	gatt_connection = gattlib_connect(NULL, MAC_ADDRESS, BDADDR_LE_PUBLIC, BT_SEC_LOW, 0, 0);
+	signal(SIGINT, disconnect);
 	return gatt_connection;
+}
+
+static void disconnect() {
+	gatt_connection_t *conn = gatt_connection;
+	gattlib_disconnect(conn);
+	printf("Disconnected from device.");
+	exit(1);
 }
 
 static void writePV_callback(const uuid_t *uuidObject, const uint8_t *data, size_t len, void *user_data) {
@@ -99,8 +115,46 @@ static void writePV_callback(const uuid_t *uuidObject, const uint8_t *data, size
 		else
 			strcpy(pv->vala, "UNKNOWN");
 	}
+	else if (strcmp(uuid, EULER_UUID) == 0 || strcmp(uuid, GRAVITY_UUID) == 0) {
+		int choice, i;
+		float x;
+		memcpy(&choice, pv->c, sizeof(int));
+		if (choice == 1)
+			i = 0;
+		else if (choice == 2)
+			i = 4;
+		else if (choice == 3)
+			i = 8;
+		if (strcmp(uuid, EULER_UUID) == 0) {
+			// 16Q16 fixed point
+			int32_t raw = (data[i]) | (data[i+1] << 8) | (data[i+2] << 16) | (data[i+3] << 24);
+			// convert to float
+			x = ((float)(raw) / (float)(1 << 16));
+		} else {
+			x = (data[i]) | (data[i+1] << 8) | (data[i+2] << 16) | (data[i+3] << 24);
+		}
+		memcpy(pv->vala, &x, sizeof(float));
+	}
+	else if (strcmp(uuid, ROTATION_UUID) == 0) {
+		char buf[300];
+		int i=0;
+		while (i < (18-1)) {
+			// 2Q14 fixed point
+			int16_t raw = (data[i]) | (data[i+1] << 8);
+			float x = ((float)(raw)) / (float)(1 << 14);
+			char val[20];
+			snprintf(val, sizeof(val), "[%f]\n", x);
+			strncat(buf, val, sizeof(val));
+			i+=2;
+		}
+		strncpy(pv->vala, buf, strlen(buf));
+	}
+	else if (strcmp(uuid, HEADING_UUID) == 0) {
+		int32_t raw = (data[0]) | (data[1] << 8) | (data[2] << 16) | (data[3] << 24);
+		float x = ((float)(raw) / (float)(1 << 16));
+		memcpy(pv->vala, &x, sizeof(float));
+	}
 	scanOnce(pv);
-	//postEvent(event);
 }
 
 static uint128_t str_to_128t(const char *string) {
@@ -112,7 +166,7 @@ static uint128_t str_to_128t(const char *string) {
 	if(sscanf(string, "%08x-%04hx-%04hx-%04hx-%08x%04hx",
 				&data0, &data1, &data2,
 				&data3, &data4, &data5) != 6)
-		printf("scan fail\n");
+		printf("Parse of UUID %s failed\n", string);
 
 	memcpy(&val[0], &data0, 4);
 	memcpy(&val[4], &data1, 2);
@@ -141,8 +195,9 @@ static void *notificationListener(void *vargp) {
 	NotifyArgs *args = (NotifyArgs *) vargp;
 	gatt_connection_t *conn = get_connection();
 	gattlib_register_notification(conn, writePV_callback, args);
+	//printf("uuid: %s\n", args->uuid_str);
 	if (gattlib_notification_start(conn, &(args->uuid))) {
-		printf("Failed to start notifications for UUID\n");
+		printf("Failed to start notifications for UUID %s (pv %s)\n", args->uuid_str, args->pv->name);
 	}
 
 	GMainLoop *loop = g_main_loop_new(NULL, 0);
@@ -154,7 +209,6 @@ static long subscribeUUID(aSubRecord *paSub) {
 	strcpy(input, paSub->a);
 	strcat(input, paSub->b);
 	uuid_t uuid = thingyUUID(input);
-
 	NotifyArgs *args = malloc(sizeof(NotifyArgs));
 	args->uuid = uuid;
 	args->pv = paSub;
@@ -172,7 +226,6 @@ static long readUUID(aSubRecord *paSub) {
 	strcat(input, paSub->b);
 	gatt_connection_t *conn = get_connection();
 	uuid_t uuid = thingyUUID(input);
-	
 	char byte[4];
 	char data[100];
 	char out_buf[100];
@@ -202,10 +255,9 @@ static long readUUID(aSubRecord *paSub) {
 				char color[10];
 				strcpy(color, led_colors[i-1]);
 				int intensity = (int) data[2];
-				//uint16_t interval = ( (uint8_t) data[3] << 8) + ( (uint8_t) data[4]);
-				int interval = (int) data[3];
+				uint16_t interval = (data[3]) | (data[4] << 8);
 				char buf[100];
-				snprintf(buf, sizeof(buf), "Breathe %s\nIntensity: %d Interval: %d", color, intensity, interval);
+				snprintf(buf, sizeof(buf), "Breathe %s\nIntensity: %d Interval: %dms", color, intensity, interval);
 				memcpy(paSub->vala, buf, strlen(buf));
 			}
 			else if (mode == LED_ONCE) {

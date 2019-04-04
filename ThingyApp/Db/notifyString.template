@@ -6,7 +6,7 @@ record(aSub, "$(Sys)$(Dev)$(Attr)Notifier") {
 	field(SCAN,	"Passive")
 	field(INAM,	"subscribeUUID")
 	field(INPA,	"0")
-	field(INPB,	$(UUID))
+	field(INPB,	"$(UUID)")
 	field(FTA,	"STRING")
 	field(FTB,	"STRING")
 	field(OUTA,	"$(Sys)$(Dev)$(Attr).VAL")

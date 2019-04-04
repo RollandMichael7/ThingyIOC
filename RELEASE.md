@@ -3,6 +3,13 @@ EPICS IOC for Nordic thingy:52
 R1-0
 =================
 
+R1-0-1 4/4/19
+-----
+
+- Add support for Euler roll/pitch/yaw and heading
+- More descriptive errors
+- Disconnect from device on keyboard interrupt
+
 R1-0-0 3/29/19
 -----
 

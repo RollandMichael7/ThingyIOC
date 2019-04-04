@@ -1,10 +1,19 @@
 file "notifyNumber.template"
 {
-pattern { Sys, 	Dev  		  ,	Attr 		 , Units,	UUID,}
-{ "XF:10IDB",	"{THINGY:001}",	"Temperature", "C",		"201"}
-{ "XF:10IDB",	"{THINGY:001}",	"Pressure",    "hPa",	"202"}
-{ "XF:10IDB",	"{THINGY:001}",	"Humidity",    "%",		"203"}
-
-{ "XF:10IDB", 	"{THINGY:001}",	"Button",	   "",		"302"}
-
+# CHOICE field is used to select between values for UUIDs which give multiple values
+# such as Euler or gravity vector, and is arbitary for single-value UUIDs
+pattern { Sys, 	Dev  		  ,	Attr 		 , Units,	UUID,	CHOICE}
+{ "XF:10IDB",	"{THINGY:001}",	"Temperature", "C",		"201", 	0}
+{ "XF:10IDB",	"{THINGY:001}",	"Pressure",    "hPa",	"202", 	0}
+{ "XF:10IDB",	"{THINGY:001}",	"Humidity",    "%",		"203", 	0}
+{ "XF:10IDB", 	"{THINGY:001}",	"Button",	   "",		"302", 	0}
+{ "XF:10IDB", 	"{THINGY:001}",	"Roll",	       "deg",	"407", 	1}
+{ "XF:10IDB", 	"{THINGY:001}",	"Pitch",	   "deg",	"407", 	2}
+{ "XF:10IDB", 	"{THINGY:001}",	"Yaw",	 	   "deg",	"407", 	3}
+{ "XF:10IDB", 	"{THINGY:001}",	"Heading",	   "deg",	"409", 	0}
+# TODO: make UUID work when it contains letters and numbers
+#{ "XF:10IDB", 	"{THINGY:001}",	"GravityX",	   "",		"40A", 	1}
+#{ "XF:10IDB", 	"{THINGY:001}",	"GravityY",	   "",		"40A", 	2}
+#{ "XF:10IDB", 	"{THINGY:001}",	"GravityZ",	   "",		"40A", 	3}
+#{ "XF:10IDB", 	"{THINGY:001}",	"Battery",	   "%",		"180F", 0}
 }
