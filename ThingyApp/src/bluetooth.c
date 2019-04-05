@@ -28,6 +28,7 @@
 #define MAC_ADDRESS "D3:69:D6:BA:E3:31"
 
 gatt_connection_t *gatt_connection = 0;
+pthread_mutex_t connlock = PTHREAD_MUTEX_INITIALIZER;
 
 #define TEMP_UUID "0201"
 #define PRESSURE_UUID "0202"
@@ -40,6 +41,7 @@ gatt_connection_t *gatt_connection = 0;
 #define ROTATION_UUID "0408"
 #define HEADING_UUID "0409"
 #define GRAVITY_UUID "040A"
+#define BATTERY_UUID "180F"
 
 #define LED_OFF 0
 #define LED_CONSTANT 1
@@ -48,26 +50,53 @@ gatt_connection_t *gatt_connection = 0;
 
 static char *led_colors[7] = {"Red", "Green", "Yellow", "Blue", "Purple", "Cyan", "White"};
 
+static void disconnect();
+
+// data for notification threads
 typedef struct {
 	char uuid_str[35];
 	aSubRecord *pv;
 	uuid_t uuid;
 } NotifyArgs;
 
-static void disconnect();
+// linked list of subscribed UUIDs for cleanup
+typedef struct {
+	uuid_t *uuid;
+	struct NotificationNode *next;
+} NotificationNode;
 
+NotificationNode *firstNode = 0;
+
+// TODO: protect connection with lock without making everything hang
 static gatt_connection_t *get_connection() {
-	if (gatt_connection != 0)
+	//pthread_mutex_lock(&connlock);
+	if (gatt_connection != 0) {
+		//pthread_mutex_unlock(&connlock);
 		return gatt_connection;
+	}
 	gatt_connection = gattlib_connect(NULL, MAC_ADDRESS, BDADDR_LE_PUBLIC, BT_SEC_LOW, 0, 0);
 	signal(SIGINT, disconnect);
+	//pthread_mutex_unlock(&connlock);
 	return gatt_connection;
 }
 
 static void disconnect() {
 	gatt_connection_t *conn = gatt_connection;
+	printf("Stopping notifications...\n");
+	if (firstNode != 0) {
+		NotificationNode *curr = firstNode; 
+		NotificationNode *next;
+		while (curr->next != 0) {
+			next = curr->next;
+			gattlib_notification_stop(conn, curr->uuid);
+			free(curr);
+			curr = next;
+		}
+		gattlib_notification_stop(conn, curr->uuid);
+		free(curr);
+	}
 	gattlib_disconnect(conn);
-	printf("Disconnected from device.");
+	printf("Disconnected from device.\n");
 	exit(1);
 }
 
@@ -155,6 +184,9 @@ static void writePV_callback(const uuid_t *uuidObject, const uint8_t *data, size
 		float x = ((float)(raw) / (float)(1 << 16));
 		memcpy(pv->vala, &x, sizeof(float));
 	}
+	else if (strcmp(uuid, BATTERY_UUID) == 0) {
+		pv->vala = data[0];
+	}
 	scanOnce(pv);
 }
 
@@ -215,16 +247,62 @@ static void *notificationListener(void *vargp) {
 		return;
 	}
 	printf("Starting notifications for pv %s\n", args->pv->name);
+	NotificationNode *node = malloc(sizeof(NotificationNode));
+	node->uuid = &(args->uuid);
+	node->next = 0;
+	if (firstNode == 0)
+		firstNode = node;
+	else {
+		NotificationNode *curr = firstNode;
+		while (curr->next != 0)
+			curr = curr->next;
+		curr->next = node;
+	}
+	//nthreads++;
 	GMainLoop *loop = g_main_loop_new(NULL, 0);
 	g_main_loop_run(loop);
 }
 
+// read a single-byte UUID once
+static uint8_t *readOnce(aSubRecord *pv, uuid_t uuid) {
+	printf("read once %s\n", pv->name);
+	uint8_t data[10];
+	size_t len = sizeof(data);
+	gatt_connection_t *conn = get_connection();
+	if((gattlib_read_char_by_uuid(conn, &uuid, data, &len)) == -1) {
+		printf("Failed to read pv %s\n", pv->name);
+		return -1;
+	}
+	return data[0];
+}
+
 static long subscribeUUID(aSubRecord *paSub) {
 	char input[35];
+	char *b = paSub->b;
+	if (strlen(b) > 3) {
+		int len = strlen(b)-2;
+		char *remainder = b + len;
+		int decimal = strtol(remainder, NULL, 10);
+		char hex = 55 + decimal;
+		char buf[5];
+		memset(buf, 0, sizeof(buf));
+		strncat(buf, b, len);
+		strncat(buf, &hex, 1);
+		b = buf;
+	}
 	strcpy(input, paSub->a);
-	strcat(input, paSub->b);
-	uuid_t uuid = thingyUUID(input);
-
+	strcat(input, b);
+	uuid_t uuid;
+	// battery UUID is 16 bits instead of 128 for some reason
+	if (strcmp(b, BATTERY_UUID) == 0) {
+		uuid_t batt = CREATE_UUID16(0x2A19);
+		//uint8_t level = readOnce(paSub, batt);
+		//paSub->vala = level;
+		//scanOnce(paSub);
+		uuid = batt;
+	}
+	else
+		uuid = thingyUUID(input);
 	NotifyArgs *args = malloc(sizeof(NotifyArgs));
 	args->uuid = uuid;
 	args->pv = paSub;
