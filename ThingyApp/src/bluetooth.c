@@ -71,6 +71,7 @@ static void disconnect() {
 	exit(1);
 }
 
+// parse notification and save to PV
 static void writePV_callback(const uuid_t *uuidObject, const uint8_t *data, size_t len, void *user_data) {
 	NotifyArgs *args = (NotifyArgs *) user_data;
 	aSubRecord *pv = args->pv;
@@ -157,6 +158,8 @@ static void writePV_callback(const uuid_t *uuidObject, const uint8_t *data, size
 	scanOnce(pv);
 }
 
+
+// taken from gattlib; convert string to 128 bit UUID object
 static uint128_t str_to_128t(const char *string) {
 	uint32_t data0, data4;
 	uint16_t data1, data2, data3, data5;
@@ -165,8 +168,18 @@ static uint128_t str_to_128t(const char *string) {
 
 	if(sscanf(string, "%08x-%04hx-%04hx-%04hx-%08x%04hx",
 				&data0, &data1, &data2,
-				&data3, &data4, &data5) != 6)
+				&data3, &data4, &data5) != 6) {
 		printf("Parse of UUID %s failed\n", string);
+		memset(&u128, 0, sizeof(uint128_t));
+		return u128;
+	}
+
+	data0 = htonl(data0);
+	data1 = htons(data1);
+	data2 = htons(data2);
+	data3 = htons(data3);
+	data4 = htonl(data4);
+	data5 = htons(data5);
 
 	memcpy(&val[0], &data0, 4);
 	memcpy(&val[4], &data1, 2);
@@ -191,15 +204,17 @@ static uuid_t thingyUUID(const char *id) {
 	return uuid;
 }
 
+// thread function to begin listening for UUID notifications from device
 static void *notificationListener(void *vargp) {
 	NotifyArgs *args = (NotifyArgs *) vargp;
 	gatt_connection_t *conn = get_connection();
 	gattlib_register_notification(conn, writePV_callback, args);
-	//printf("uuid: %s\n", args->uuid_str);
 	if (gattlib_notification_start(conn, &(args->uuid))) {
-		printf("Failed to start notifications for UUID %s (pv %s)\n", args->uuid_str, args->pv->name);
+		printf("ERROR: Failed to start notifications for UUID %s (pv %s)\n", args->uuid_str, args->pv->name);
+		free(args);
+		return;
 	}
-
+	printf("Starting notifications for pv %s\n", args->pv->name);
 	GMainLoop *loop = g_main_loop_new(NULL, 0);
 	g_main_loop_run(loop);
 }
@@ -209,23 +224,24 @@ static long subscribeUUID(aSubRecord *paSub) {
 	strcpy(input, paSub->a);
 	strcat(input, paSub->b);
 	uuid_t uuid = thingyUUID(input);
+
 	NotifyArgs *args = malloc(sizeof(NotifyArgs));
 	args->uuid = uuid;
 	args->pv = paSub;
 	strcpy(args->uuid_str, input);
 	pthread_t thread_id;
 	pthread_create(&thread_id, NULL, &notificationListener, (void *)args);
-	paSub->pact = FALSE;
 	return 0;
 }
 
 static long readUUID(aSubRecord *paSub) {
-	int i, ret;
 	char input[35];
 	strcpy(input, paSub->a);
 	strcat(input, paSub->b);
 	gatt_connection_t *conn = get_connection();
 	uuid_t uuid = thingyUUID(input);
+
+	int i;
 	char byte[4];
 	char data[100];
 	char out_buf[100];
