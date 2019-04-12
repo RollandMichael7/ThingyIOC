@@ -14,3 +14,4 @@ dbLoadRecords "$(TOP)/db/readwrite.db"
 
 iocInit
 dbpf("XF:10IDB{THINGY:001}LEDReader.SCAN","1 second")
+dbpf("XF:10IDB{THINGY:001}BatteryReader.SCAN","1 second")

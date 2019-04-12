@@ -37,6 +37,7 @@ pthread_mutex_t connlock = PTHREAD_MUTEX_INITIALIZER;
 #define LED_UUID "0301"
 #define BUTTON_UUID "0302"
 #define ORIENTATION_UUID "0403"
+#define RAWMOTION_UUID "0406"
 #define EULER_UUID "0407"
 #define ROTATION_UUID "0408"
 #define HEADING_UUID "0409"
@@ -149,12 +150,11 @@ static void writePV_callback(const uuid_t *uuidObject, const uint8_t *data, size
 		int choice, i;
 		float x;
 		memcpy(&choice, pv->c, sizeof(int));
-		if (choice == 1)
-			i = 0;
-		else if (choice == 2)
-			i = 4;
-		else if (choice == 3)
-			i = 8;
+		if (choice < 1 || choice > 3) {
+			printf("Invalid CHOICE for %s\n", pv->name);
+			return;
+		}
+		i = 4 * (choice-1);
 		if (strcmp(uuid, EULER_UUID) == 0) {
 			// 16Q16 fixed point
 			int32_t raw = (data[i]) | (data[i+1] << 8) | (data[i+2] << 16) | (data[i+3] << 24);
@@ -164,6 +164,28 @@ static void writePV_callback(const uuid_t *uuidObject, const uint8_t *data, size
 			x = (data[i]) | (data[i+1] << 8) | (data[i+2] << 16) | (data[i+3] << 24);
 		}
 		memcpy(pv->vala, &x, sizeof(float));
+	}
+	else if (strcmp(uuid, RAWMOTION_UUID) == 0) {
+		int choice, i;
+		memcpy(&choice, pv->c, sizeof(int));
+		if (choice < 1 || choice > 9) {
+			printf("Invalid CHOICE for %s\n", pv->name);
+			return;
+		}
+		i = 2 * (choice-1);
+		int16_t raw = (data[i]) | (data[i+1] << 8);
+		float x;
+		// Accelerometer: 6Q10 format
+		if (choice >= 1 && choice <= 3)
+			x = ((float)(raw)) / (float)(1 << 10);
+		// Gyroscope: 11Q5 format
+		else if (choice >= 4 && choice <= 6)
+			x = ((float)(raw)) / (float)(1 << 5);
+		// Compass: 12Q4 format
+		else
+			x = ((float)(raw)) / (float)(1 << 4);
+		memcpy(pv->vala, &x, sizeof(float));
+
 	}
 	else if (strcmp(uuid, ROTATION_UUID) == 0) {
 		char buf[300];
@@ -226,7 +248,7 @@ static uint128_t str_to_128t(const char *string) {
 // construct a 128 bit UUID for a Nordic thingy:52
 // given its unique UUID component
 static uuid_t thingyUUID(const char *id) {
-	char buf[35];
+	char buf[40];
 	strcpy(buf, "EF68");
 	strcat(buf, id);
 	strcat(buf, "-9B35-4933-9B10-52FFA9740042");
@@ -250,6 +272,7 @@ static void *notificationListener(void *vargp) {
 	NotificationNode *node = malloc(sizeof(NotificationNode));
 	node->uuid = &(args->uuid);
 	node->next = 0;
+	pthread_mutex_lock(&connlock);
 	if (firstNode == 0)
 		firstNode = node;
 	else {
@@ -258,27 +281,15 @@ static void *notificationListener(void *vargp) {
 			curr = curr->next;
 		curr->next = node;
 	}
-	//nthreads++;
+	pthread_mutex_unlock(&connlock);
 	GMainLoop *loop = g_main_loop_new(NULL, 0);
 	g_main_loop_run(loop);
 }
 
-// read a single-byte UUID once
-static uint8_t *readOnce(aSubRecord *pv, uuid_t uuid) {
-	printf("read once %s\n", pv->name);
-	uint8_t data[10];
-	size_t len = sizeof(data);
-	gatt_connection_t *conn = get_connection();
-	if((gattlib_read_char_by_uuid(conn, &uuid, data, &len)) == -1) {
-		printf("Failed to read pv %s\n", pv->name);
-		return -1;
-	}
-	return data[0];
-}
-
-static long subscribeUUID(aSubRecord *paSub) {
-	char input[35];
-	char *b = paSub->b;
+static long subscribeUUID(aSubRecord *pv) {
+	char input[40];
+	char *b = pv->b;
+	// convert decimal to hex
 	if (strlen(b) > 3) {
 		int len = strlen(b)-2;
 		char *remainder = b + len;
@@ -290,34 +301,31 @@ static long subscribeUUID(aSubRecord *paSub) {
 		strncat(buf, &hex, 1);
 		b = buf;
 	}
-	strcpy(input, paSub->a);
+	strcpy(input, pv->a);
 	strcat(input, b);
-	uuid_t uuid;
-	// battery UUID is 16 bits instead of 128 for some reason
-	if (strcmp(b, BATTERY_UUID) == 0) {
-		uuid_t batt = CREATE_UUID16(0x2A19);
-		//uint8_t level = readOnce(paSub, batt);
-		//paSub->vala = level;
-		//scanOnce(paSub);
-		uuid = batt;
-	}
-	else
-		uuid = thingyUUID(input);
+	uuid_t uuid = thingyUUID(input);
 	NotifyArgs *args = malloc(sizeof(NotifyArgs));
 	args->uuid = uuid;
-	args->pv = paSub;
+	args->pv = pv;
 	strcpy(args->uuid_str, input);
 	pthread_t thread_id;
 	pthread_create(&thread_id, NULL, &notificationListener, (void *)args);
 	return 0;
 }
 
-static long readUUID(aSubRecord *paSub) {
-	char input[35];
-	strcpy(input, paSub->a);
-	strcat(input, paSub->b);
+static long readUUID(aSubRecord *pv) {
+	char input[40];
+	strcpy(input, pv->a);
+	strcat(input, pv->b);
+	uuid_t uuid;
+	if (strcmp(input, "018015") == 0) {
+		// battery is a 16 bit UUID for some reason
+		uuid_t batt = CREATE_UUID16(0x2A19);
+		uuid = batt;
+	}
+	else
+		uuid = thingyUUID(input);
 	gatt_connection_t *conn = get_connection();
-	uuid_t uuid = thingyUUID(input);
 
 	int i;
 	char byte[4];
@@ -326,15 +334,21 @@ static long readUUID(aSubRecord *paSub) {
 	memset(out_buf, 0, sizeof(out_buf));
 	size_t len = sizeof(data);
 	if (gattlib_read_char_by_uuid(conn, &uuid, data, &len) == -1) {
-		printf("Read of uuid %s failed.\n", input);
+		printf("Read of uuid %s (pv %s) failed.\n", input, pv->name);
 		return 1;
 	}
 	else {
-		if (strcmp(input, LED_UUID) == 0) {
-			int mode = (int) data[i];
+		if (strcmp(input, "018015") == 0) {
+			int level = data[0];
+			char buf[5];
+			snprintf(buf, sizeof(buf), "%d%%", level);
+			strncpy(pv->vala, buf, strlen(buf));
+		}
+		else if (strcmp(input, LED_UUID) == 0) {
+			int mode = (int) data[0];
 			if (mode == LED_OFF) {
 				char buf[4] = "Off";
-				memcpy(paSub->vala, buf, strlen(buf));
+				memcpy(pv->vala, buf, strlen(buf));
 			}
 			else if (mode == LED_CONSTANT) {
 				uint8_t red = (uint8_t) data[1];
@@ -342,7 +356,7 @@ static long readUUID(aSubRecord *paSub) {
 				uint8_t blue = (uint8_t) data[3];
 				char buf[25];
 				snprintf(buf, sizeof(buf), "Constant R%dG%dB%d", red, green, blue);
-				memcpy(paSub->vala, buf, strlen(buf));
+				memcpy(pv->vala, buf, strlen(buf));
 			}
 			else if (mode == LED_BREATHE) {
 				int i = (int) data[1];
@@ -352,11 +366,11 @@ static long readUUID(aSubRecord *paSub) {
 				uint16_t interval = (data[3]) | (data[4] << 8);
 				char buf[100];
 				snprintf(buf, sizeof(buf), "Breathe %s\nIntensity: %d Interval: %dms", color, intensity, interval);
-				memcpy(paSub->vala, buf, strlen(buf));
+				memcpy(pv->vala, buf, strlen(buf));
 			}
 			else if (mode == LED_ONCE) {
 				char buf[20] = "One shot";
-				memcpy(paSub->vala, buf, strlen(buf));
+				memcpy(pv->vala, buf, strlen(buf));
 			}
 			else
 				printf("LED unknown?!?\n");
@@ -367,7 +381,7 @@ static long readUUID(aSubRecord *paSub) {
 				strcat(out_buf, byte);
 			}
 			//printf("%s\n", out_buf);
-			memcpy(paSub->vala, out_buf, strlen(out_buf));
+			memcpy(pv->vala, out_buf, strlen(out_buf));
 		}
 	}
 	return 0;

@@ -2,4 +2,5 @@ file "readwrite.template"
 {
 pattern { Sys, 	Dev  		  ,	Attr 		 , UUID}
 { "XF:10IDB",	"{THINGY:001}",	"LED"		 , "301"}
+{ "XF:10IDB",	"{THINGY:001}",	"Battery"    , "18015"}
 }

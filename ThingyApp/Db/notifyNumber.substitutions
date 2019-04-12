@@ -1,19 +1,39 @@
 file "notifyNumber.template"
 {
 # CHOICE field is used to select between values for UUIDs which give multiple values
-# such as Euler or gravity vector, and is arbitary for single-value UUIDs
+# such as Euler or gravity vector, and is meaningless for single-value UUIDs
+
+# Note: Leading zero must be omitted from UUID since EPICS doesnt like it
+
+# EPICS also doesnt like mixing letters and numbers for input, so digits
+# must be represented as decimal for now....
+# for example: 40A -> 4010, 180F -> 18015
+
 pattern { Sys, 	Dev  		  ,	Attr 		 , Units,	UUID,	CHOICE}
+
+# Environment
 { "XF:10IDB",	"{THINGY:001}",	"Temperature", "C",		"201", 	0}
 { "XF:10IDB",	"{THINGY:001}",	"Pressure",    "hPa",	"202", 	0}
 { "XF:10IDB",	"{THINGY:001}",	"Humidity",    "%",		"203", 	0}
+
+# User Interface
 { "XF:10IDB", 	"{THINGY:001}",	"Button",	   "",		"302", 	0}
+
+# Motion
+{ "XF:10IDB", 	"{THINGY:001}",	"AccelerationX","g",	"406", 	1}
+{ "XF:10IDB", 	"{THINGY:001}",	"AccelerationY","g",	"406", 	2}
+{ "XF:10IDB", 	"{THINGY:001}",	"AccelerationZ","g",	"406", 	3}
+{ "XF:10IDB", 	"{THINGY:001}",	"GyroscopeX",  "deg/s",	"406", 	4}
+{ "XF:10IDB", 	"{THINGY:001}",	"GyroscopeY",  "deg/s",	"406", 	5}
+{ "XF:10IDB", 	"{THINGY:001}",	"GyroscopeZ",  "deg/s",	"406", 	6}
+{ "XF:10IDB", 	"{THINGY:001}",	"CompassX",    "uT",	"406", 	7}
+{ "XF:10IDB", 	"{THINGY:001}",	"CompassY",    "uT",	"406", 	8}
+{ "XF:10IDB", 	"{THINGY:001}",	"CompassZ",    "uT",	"406", 	9}
 { "XF:10IDB", 	"{THINGY:001}",	"Roll",	       "deg",	"407", 	1}
 { "XF:10IDB", 	"{THINGY:001}",	"Pitch",	   "deg",	"407", 	2}
 { "XF:10IDB", 	"{THINGY:001}",	"Yaw",	 	   "deg",	"407", 	3}
 { "XF:10IDB", 	"{THINGY:001}",	"Heading",	   "deg",	"409", 	0}
-# TODO: make UUID work when it contains letters and numbers
-#{ "XF:10IDB", 	"{THINGY:001}",	"GravityX",	   "",		"40A", 	1}
-#{ "XF:10IDB", 	"{THINGY:001}",	"GravityY",	   "",		"40A", 	2}
-#{ "XF:10IDB", 	"{THINGY:001}",	"GravityZ",	   "",		"40A", 	3}
-#{ "XF:10IDB", 	"{THINGY:001}",	"Battery",	   "%",		"180F", 0}
+#{ "XF:10IDB", 	"{THINGY:001}",	"GravityX",	   "",		"4010",	1}
+#{ "XF:10IDB", 	"{THINGY:001}",	"GravityY",	   "",		"4010",	2}
+#{ "XF:10IDB", 	"{THINGY:001}",	"GravityZ",	   "",		"4010",	3}
 }
