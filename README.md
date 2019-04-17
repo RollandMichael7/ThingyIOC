@@ -22,9 +22,9 @@ $ bluetoothctl
 ```$ hcitool lescan```
 
 Either of these commands should give a list of nearby Bluetooth devices with their MAC address and name. Unless you've changed 
-it, the Thingy's name should be Thingy. Find its MAC address, and enter it into ```ThingyApp/src/bluetooth.c``` as the 
-```MAC_ADDRESS```. This is all the set up that is necessary, however if you want to configure which sensors are read you can edit 
-the ```.substitions``` files in ```ThingyApp/Db``` to pick the UUIDs you want to read. You can find the UUIDs for each sensor on 
+it, the Thingy's name should be Thingy. Find its MAC address, and enter it into ```iocBoot/iocThingy/st.cmd``` as the argument to 
+```thingyConfig()```. This is all the set up that is necessary, however if you want to configure which sensors are read you can edit 
+the ```.substitutions``` files in ```ThingyApp/Db``` to pick the UUIDs you want to read. You can find the UUIDs for each sensor on 
 Nordic's site: https://nordicsemiconductor.github.io/Nordic-Thingy52-FW/documentation/firmware_architecture.html
 
 

@@ -1,6 +1,9 @@
 EPICS IOC for Nordic thingy:52
 
 Currently supported sensors:
+
+- Quaternions
+- Tap
 - Battery
 - Accelerometer
 - Gyroscope
@@ -15,6 +18,14 @@ Currently supported sensors:
 
 R1-0
 =================
+
+R1-0-3 4/17/19
+----
+
+- Add support for quaternions, tap sensor
+- Move MAC address declaration to thingyConfig() IOC command
+- Add forward links to read/write PVs
+- Add documentation to database files
 
 R1-0-2 4/12/19
 ----

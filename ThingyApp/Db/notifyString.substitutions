@@ -1,7 +1,17 @@
-file "notifyString.template"
-{
+file "notifyString.template" {
+
+# PV name is $(Sys)$(Dev)$(Attr)
+
+# UUID selects the sensor to be read; must be notify type
+#	Note that EPICS doesn't like a leading zero, so the first zero is omitted
+# https://nordicsemiconductor.github.io/Nordic-Thingy52-FW/documentation/firmware_architecture.html
+
 pattern { Sys, 	Dev  		  ,	Attr 		 ,		UUID}
+
 #{ "XF:10IDB", 	"{THINGY:001}",	"AirQuality" ,		"204"}
+#{ "XF:10IDB", 	"{THINGY:001}",	"Light" ,			"205"}
+{ "XF:10IDB", 	"{THINGY:001}",	"Taps",				"402"}
 { "XF:10IDB", 	"{THINGY:001}",	"Orientation",		"403"}
 #{ "XF:10IDB",	"{THINGY:001}",	"RotationMatrix",	"408"}
+
 }

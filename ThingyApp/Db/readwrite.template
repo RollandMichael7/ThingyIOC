@@ -18,4 +18,5 @@ record(aSub, "$(Sys)$(Dev)$(Attr)Reader") {
 record(waveform, "$(Sys)$(Dev)$(Attr)") {
 	field(DESC,	"$(Attr)")
 	field(FTVL,	"STRING")
+	field(FLNK,	"$(Next)Reader")
 }

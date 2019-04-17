@@ -24,8 +24,7 @@
 #include <glib.h>
 #include "gattlib.h"
 
-
-#define MAC_ADDRESS "D3:69:D6:BA:E3:31"
+#include "thingy.h"
 
 gatt_connection_t *gatt_connection = 0;
 pthread_mutex_t connlock = PTHREAD_MUTEX_INITIALIZER;
@@ -34,9 +33,12 @@ pthread_mutex_t connlock = PTHREAD_MUTEX_INITIALIZER;
 #define PRESSURE_UUID "0202"
 #define HUMIDITY_UUID "0203"
 #define AIRQUAL_UUID "0204"
+#define LIGHT_UUID "0205"
 #define LED_UUID "0301"
 #define BUTTON_UUID "0302"
+#define TAP_UUID "0402"
 #define ORIENTATION_UUID "0403"
+#define QUATERNION_UUID "0404"
 #define RAWMOTION_UUID "0406"
 #define EULER_UUID "0407"
 #define ROTATION_UUID "0408"
@@ -50,6 +52,7 @@ pthread_mutex_t connlock = PTHREAD_MUTEX_INITIALIZER;
 #define LED_ONCE 3
 
 static char *led_colors[7] = {"Red", "Green", "Yellow", "Blue", "Purple", "Cyan", "White"};
+static char *tap_directions[6] = {"+X", "-X", "+Y", "-Y", "+Z", "-Z"};
 
 static void disconnect();
 
@@ -70,14 +73,19 @@ NotificationNode *firstNode = 0;
 
 // TODO: protect connection with lock without making everything hang
 static gatt_connection_t *get_connection() {
+	if (gatt_connection != 0) {
+		return gatt_connection;
+	}
 	//pthread_mutex_lock(&connlock);
 	if (gatt_connection != 0) {
 		//pthread_mutex_unlock(&connlock);
 		return gatt_connection;
 	}
-	gatt_connection = gattlib_connect(NULL, MAC_ADDRESS, BDADDR_LE_PUBLIC, BT_SEC_LOW, 0, 0);
+	//printf("Connecting to device %s...\n", mac_address);
+	gatt_connection = gattlib_connect(NULL, mac_address, BDADDR_LE_PUBLIC, BT_SEC_LOW, 0, 0);
 	signal(SIGINT, disconnect);
 	//pthread_mutex_unlock(&connlock);
+	//printf("Connected.\n");
 	return gatt_connection;
 }
 
@@ -133,6 +141,24 @@ static void writePV_callback(const uuid_t *uuidObject, const uint8_t *data, size
 		//printf("%s\n", buf3);
 		strcpy(pv->vala, buf3);
 	}
+	else if (strcmp(uuid, LIGHT_UUID) == 0) {
+		uint16_t r = (data[0]) | (data[1] << 8);
+		uint16_t g = (data[2]) | (data[3] << 8);
+		uint16_t b = (data[4]) | (data[5] << 8);
+		uint16_t c = (data[6]) | (data[7] << 8);
+		char buf[50];
+		memset(buf, 0, sizeof(buf));
+		snprintf(buf, sizeof(buf), "R%dG%dB%d Clear %d", r,g,b,c);
+		strncpy(pv->vala, buf, strlen(buf));
+	}
+	else if (strcmp(uuid, TAP_UUID) == 0) {
+		uint8_t i = data[0];
+		uint8_t count = data[1];
+		char buf[30];
+		memset(buf, 0, sizeof(buf));
+		snprintf(buf, sizeof(buf), "%d taps in %s direction", count, tap_directions[i-1]);
+		strncpy(pv->vala, buf, strlen(buf));
+	}
 	else if (strcmp(uuid, ORIENTATION_UUID) == 0) {
 		int n=data[0];
 		if (n == 0)
@@ -146,21 +172,24 @@ static void writePV_callback(const uuid_t *uuidObject, const uint8_t *data, size
 		else
 			strcpy(pv->vala, "UNKNOWN");
 	}
-	else if (strcmp(uuid, EULER_UUID) == 0 || strcmp(uuid, GRAVITY_UUID) == 0) {
+	else if (strcmp(uuid, QUATERNION_UUID) == 0 || strcmp(uuid, EULER_UUID) == 0 || strcmp(uuid, GRAVITY_UUID) == 0) {
 		int choice, i;
 		float x;
 		memcpy(&choice, pv->c, sizeof(int));
-		if (choice < 1 || choice > 3) {
+		if (choice < 1 || choice > 4) {
 			printf("Invalid CHOICE for %s\n", pv->name);
 			return;
 		}
 		i = 4 * (choice-1);
+		int32_t raw = (data[i]) | (data[i+1] << 8) | (data[i+2] << 16) | (data[i+3] << 24);
 		if (strcmp(uuid, EULER_UUID) == 0) {
-			// 16Q16 fixed point
-			int32_t raw = (data[i]) | (data[i+1] << 8) | (data[i+2] << 16) | (data[i+3] << 24);
-			// convert to float
+			// 16Q16 fixed point -> float
 			x = ((float)(raw) / (float)(1 << 16));
+		} else if (strcmp(uuid, QUATERNION_UUID) == 0) {
+			// 2Q30 fixed point -> float
+			x = ((float)(raw) / (float)(1 << 30));
 		} else {
+			// gravity is just a float???
 			x = (data[i]) | (data[i+1] << 8) | (data[i+2] << 16) | (data[i+3] << 24);
 		}
 		memcpy(pv->vala, &x, sizeof(float));

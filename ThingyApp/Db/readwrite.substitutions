@@ -1,6 +1,17 @@
-file "readwrite.template"
-{
-pattern { Sys, 	Dev  		  ,	Attr 		 , UUID}
-{ "XF:10IDB",	"{THINGY:001}",	"LED"		 , "301"}
-{ "XF:10IDB",	"{THINGY:001}",	"Battery"    , "18015"}
+file "readwrite.template" {
+
+# PV name is $(Sys)$(Dev)$(Attr)
+
+# UUID describes the sensor to be read; must be read/write type
+#	EPICS doesn't like mixing numbers and letters for some reason, so hex is converted to decimal.
+#	eg. 180F -> 18015
+# https://nordicsemiconductor.github.io/Nordic-Thingy52-FW/documentation/firmware_architecture.html
+
+# "Next" points to forward link PV 
+
+pattern { Sys, 	Dev  		  ,	Attr 		 , UUID,	Next}
+
+{ "XF:10IDB",	"{THINGY:001}",	"LED"		 , "301",	"XF:10IDB{THINGY:001}Battery"}
+{ "XF:10IDB",	"{THINGY:001}",	"Battery"    , "18015",	""}
+
 }
