@@ -2,7 +2,7 @@
 
 # Subscribe to notifications
 record(aSub, "$(Sys)$(Dev)$(Attr)Notifier") {
-	field(DESC,	"$(Attr) listener")
+	field(DESC,	"$(Attr) listener for thingy:52")
 	field(SCAN,	"Passive")
 	field(INAM,	"subscribeUUID")
 	field(INPA,	"0")
@@ -16,6 +16,6 @@ record(aSub, "$(Sys)$(Dev)$(Attr)Notifier") {
 
 # Receive notifications
 record(stringin, "$(Sys)$(Dev)$(Attr)") {
-	field(DESC,	"$(Attr)")
-	field(VAL,	"NULL")
+	field(DESC,	"$(Attr) for thingy:52")
+	field(VAL,	"Waiting...")
 }

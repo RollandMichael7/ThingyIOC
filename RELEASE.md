@@ -2,6 +2,9 @@ EPICS IOC for Nordic thingy:52
 
 Currently supported sensors:
 
+- Step counter
+- Air quality (gas)
+- Gravity vectors
 - Quaternions
 - Tap
 - Battery
@@ -18,6 +21,11 @@ Currently supported sensors:
 
 R1-0
 =================
+
+R1-0-4 4/19/19
+----
+- Add support for step counter, air quality (gas), gravity vectors
+- Rotation matrix supported but too long to be stored in stringin record
 
 R1-0-3 4/17/19
 ----

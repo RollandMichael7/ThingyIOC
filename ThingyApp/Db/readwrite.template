@@ -2,7 +2,7 @@
 
 # Read UUID
 record(aSub, "$(Sys)$(Dev)$(Attr)Reader") {
-	field(DESC,	"$(Attr) reader")
+	field(DESC,	"$(Attr) reader for thingy:52")
 	field(EFLG,	"ON CHANGE")
 	field(SNAM,	"readUUID")
 	field(INPA,	"0")
@@ -17,6 +17,7 @@ record(aSub, "$(Sys)$(Dev)$(Attr)Reader") {
 # Receive UUID reading
 record(waveform, "$(Sys)$(Dev)$(Attr)") {
 	field(DESC,	"$(Attr)")
+	field(NELM,	100)
 	field(FTVL,	"STRING")
 	field(FLNK,	"$(Next)Reader")
 }

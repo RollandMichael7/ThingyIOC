@@ -15,7 +15,7 @@
     <color red="192" green="192" blue="192" />
   </foreground_color>
   <grid_space>6</grid_space>
-  <height>600</height>
+  <height>50</height>
   <macros>
     <include_parent_macros>true</include_parent_macros>
   </macros>
@@ -28,7 +28,7 @@
   <show_ruler>true</show_ruler>
   <snap_to_geometry>true</snap_to_geometry>
   <widget_type>Display</widget_type>
-  <width>800</width>
+  <width>455</width>
   <wuid>-7a90358c:169917bf4bc:-7bce</wuid>
   <x>-1</x>
   <y>-1</y>
@@ -89,7 +89,7 @@
     <border_width>1</border_width>
     <enabled>true</enabled>
     <font>
-      <fontdata fontName="Sans" height="11" style="0" pixels="false" />
+      <fontdata fontName="Sans" height="13" style="0" pixels="false" />
     </font>
     <forecolor_alarm_sensitive>false</forecolor_alarm_sensitive>
     <foreground_color>
@@ -97,7 +97,7 @@
     </foreground_color>
     <format_type>0</format_type>
     <height>43</height>
-    <horizontal_alignment>2</horizontal_alignment>
+    <horizontal_alignment>0</horizontal_alignment>
     <name>Text Update_48</name>
     <precision>0</precision>
     <precision_from_pv>true</precision_from_pv>
@@ -119,7 +119,7 @@ $(pv_value)</tooltip>
     <vertical_alignment>1</vertical_alignment>
     <visible>true</visible>
     <widget_type>Text Update</widget_type>
-    <width>218</width>
+    <width>283</width>
     <wrap_words>false</wrap_words>
     <wuid>-7a90358c:169917bf4bc:-7b9c</wuid>
     <x>168</x>

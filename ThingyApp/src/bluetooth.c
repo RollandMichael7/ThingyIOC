@@ -6,7 +6,6 @@
 #include <ctype.h>
 #include <math.h>
 #include <pthread.h>
-#include <inttypes.h>
 #include <signal.h>
 
 #include <dbAccess.h>
@@ -39,6 +38,7 @@ pthread_mutex_t connlock = PTHREAD_MUTEX_INITIALIZER;
 #define TAP_UUID "0402"
 #define ORIENTATION_UUID "0403"
 #define QUATERNION_UUID "0404"
+#define STEP_UUID "0405"
 #define RAWMOTION_UUID "0406"
 #define EULER_UUID "0407"
 #define ROTATION_UUID "0408"
@@ -130,16 +130,18 @@ static void writePV_callback(const uuid_t *uuidObject, const uint8_t *data, size
 	}
 	else if (strcmp(uuid, AIRQUAL_UUID) == 0) {
 		uint16_t co = (data[0]) | (data[1] << 8);
-		char buf1[32];
-		snprintf(buf1, sizeof(buf1), "%" PRIu16 " eCO2 ppm\n", co);
+		char buf1[50];
+		memset(buf1, 0, sizeof(buf1));
+		snprintf(buf1, sizeof(buf1), "%u eCO2 ppm\n", (unsigned int)co);
 		uint16_t tvoc = (data[2]) | (data[3] << 8);
-		char buf2[32];
-		snprintf(buf2, sizeof(buf2), "%" PRIu16 " TVOC ppb", tvoc);
-		char buf3[64];
-		strncat(buf3, buf1, sizeof(buf1));
-		strncat(buf3, buf2, sizeof(buf2));
-		//printf("%s\n", buf3);
-		strcpy(pv->vala, buf3);
+		char buf2[50];
+		memset(buf2, 0, sizeof(buf2));
+		snprintf(buf2, sizeof(buf2), "%u TVOC ppb", (unsigned int)tvoc);
+		char buf3[110];
+		memset(buf3, 0, sizeof(buf3));
+		strncat(buf3, buf1, strlen(buf1));
+		strncat(buf3, buf2, strlen(buf2));
+		strncpy(pv->vala, buf3, strlen(buf3));
 	}
 	else if (strcmp(uuid, LIGHT_UUID) == 0) {
 		uint16_t r = (data[0]) | (data[1] << 8);
@@ -148,7 +150,9 @@ static void writePV_callback(const uuid_t *uuidObject, const uint8_t *data, size
 		uint16_t c = (data[6]) | (data[7] << 8);
 		char buf[50];
 		memset(buf, 0, sizeof(buf));
-		snprintf(buf, sizeof(buf), "R%dG%dB%d Clear %d", r,g,b,c);
+		//printf("R%d & %d, G%d & %d, B%d & %d, C%d & %d\n", data[0], data[1], data[2], data[3], data[4], data[5], data[6], data[7]);
+		//printf("R %d %d %u\n", data[0], data[1], (unsigned int)r);
+		snprintf(buf, sizeof(buf), "R%d G%d B%d\nClear %d", r,g,b,c);
 		strncpy(pv->vala, buf, strlen(buf));
 	}
 	else if (strcmp(uuid, TAP_UUID) == 0) {
@@ -172,6 +176,14 @@ static void writePV_callback(const uuid_t *uuidObject, const uint8_t *data, size
 		else
 			strcpy(pv->vala, "UNKNOWN");
 	}
+	else if (strcmp(uuid, STEP_UUID) == 0) {
+		int32_t steps = (data[0]) | (data[1] << 8) | (data[2] << 16) | (data[3] << 24);
+		int32_t time = (data[4]) | (data[5] << 8) | (data[6] << 16) | (data[7] << 24);
+		time = time / 1000;
+		char buf[100];
+		snprintf(buf, sizeof(buf), "%d in %dsec", steps, time);
+		strncpy(pv->vala, buf, strlen(buf));
+	}
 	else if (strcmp(uuid, QUATERNION_UUID) == 0 || strcmp(uuid, EULER_UUID) == 0 || strcmp(uuid, GRAVITY_UUID) == 0) {
 		int choice, i;
 		float x;
@@ -190,7 +202,8 @@ static void writePV_callback(const uuid_t *uuidObject, const uint8_t *data, size
 			x = ((float)(raw) / (float)(1 << 30));
 		} else {
 			// gravity is just a float???
-			x = (data[i]) | (data[i+1] << 8) | (data[i+2] << 16) | (data[i+3] << 24);
+			//x = (data[i]) | (data[i+1] << 8) | (data[i+2] << 16) | (data[i+3] << 24);
+			memcpy(&x, data+i, sizeof(x));
 		}
 		memcpy(pv->vala, &x, sizeof(float));
 	}
@@ -218,14 +231,18 @@ static void writePV_callback(const uuid_t *uuidObject, const uint8_t *data, size
 	}
 	else if (strcmp(uuid, ROTATION_UUID) == 0) {
 		char buf[300];
+		memset(buf, 0, sizeof(buf));
 		int i=0;
 		while (i < (18-1)) {
 			// 2Q14 fixed point
 			int16_t raw = (data[i]) | (data[i+1] << 8);
 			float x = ((float)(raw)) / (float)(1 << 14);
 			char val[20];
-			snprintf(val, sizeof(val), "[%f]\n", x);
-			strncat(buf, val, sizeof(val));
+			if (i==4 || i==10)
+				snprintf(val, sizeof(val), "%.2f\n", x);
+			else
+				snprintf(val, sizeof(val), "%.2f ", x);
+			strncat(buf, val, strlen(val));
 			i+=2;
 		}
 		strncpy(pv->vala, buf, strlen(buf));
@@ -377,7 +394,7 @@ static long readUUID(aSubRecord *pv) {
 			int mode = (int) data[0];
 			if (mode == LED_OFF) {
 				char buf[4] = "Off";
-				memcpy(pv->vala, buf, strlen(buf));
+				strncpy(pv->vala, buf, strlen(buf));
 			}
 			else if (mode == LED_CONSTANT) {
 				uint8_t red = (uint8_t) data[1];
@@ -385,7 +402,7 @@ static long readUUID(aSubRecord *pv) {
 				uint8_t blue = (uint8_t) data[3];
 				char buf[25];
 				snprintf(buf, sizeof(buf), "Constant R%dG%dB%d", red, green, blue);
-				memcpy(pv->vala, buf, strlen(buf));
+				strncpy(pv->vala, buf, strlen(buf));
 			}
 			else if (mode == LED_BREATHE) {
 				int i = (int) data[1];
@@ -394,15 +411,18 @@ static long readUUID(aSubRecord *pv) {
 				int intensity = (int) data[2];
 				uint16_t interval = (data[3]) | (data[4] << 8);
 				char buf[100];
-				snprintf(buf, sizeof(buf), "Breathe %s\nIntensity: %d Interval: %dms", color, intensity, interval);
-				memcpy(pv->vala, buf, strlen(buf));
+				snprintf(buf, sizeof(buf), "Breathe %s\n%d%% %dms", color, intensity, interval);
+				//snprintf(buf, sizeof(buf), "Breathe %s\nIntensity %d%% Interval %dms", color, intensity, interval);
+				//printf("%s\n", buf, strlen(buf));
+				strncpy(pv->vala, buf, strlen(buf));
+				//pv->vala = buf;
 			}
 			else if (mode == LED_ONCE) {
 				char buf[20] = "One shot";
-				memcpy(pv->vala, buf, strlen(buf));
+				strncpy(pv->vala, buf, strlen(buf));
 			}
 			else
-				printf("LED unknown?!?\n");
+				printf("LED undefined reading\n");
 		}
 		else {
 			for (i=0; i < len; i++) {
@@ -410,11 +430,12 @@ static long readUUID(aSubRecord *pv) {
 				strcat(out_buf, byte);
 			}
 			//printf("%s\n", out_buf);
-			memcpy(pv->vala, out_buf, strlen(out_buf));
+			strncpy(pv->vala, out_buf, strlen(out_buf));
 		}
 	}
 	return 0;
 }
+
 
 /* Register these symbols for use by IOC code: */
 epicsRegisterFunction(subscribeUUID);

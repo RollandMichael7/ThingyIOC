@@ -41,8 +41,8 @@ pattern { Sys, 	Dev			  ,	Attr 		  , Units,	UUID,	CHOICE}
 { "XF:10IDB", 	"{THINGY:001}",	"Pitch",		"deg",		"407", 	2}
 { "XF:10IDB", 	"{THINGY:001}",	"Yaw",			"deg",		"407", 	3}
 { "XF:10IDB", 	"{THINGY:001}",	"Heading",		"deg",		"409", 	0}
-#{ "XF:10IDB", 	"{THINGY:001}",	"GravityX",		"",			"4010",	1}
-#{ "XF:10IDB", 	"{THINGY:001}",	"GravityY",		"",			"4010",	2}
-#{ "XF:10IDB", 	"{THINGY:001}",	"GravityZ",		"",			"4010",	3}
+{ "XF:10IDB", 	"{THINGY:001}",	"GravityX",		"m/s^2",	"4010",	1}
+{ "XF:10IDB", 	"{THINGY:001}",	"GravityY",		"m/s^2",	"4010",	2}
+{ "XF:10IDB", 	"{THINGY:001}",	"GravityZ",		"m/s^2",	"4010",	3}
 
 }
