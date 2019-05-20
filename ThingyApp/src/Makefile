@@ -12,8 +12,8 @@ DBD += thingy.dbd
 
 # thingy.dbd will be made up from these files:
 thingy_DBD += base.dbd
-thingy_DBD += asyn.dbd
-thingy_DBD += drvAsynIPPort.dbd
+#thingy_DBD += asyn.dbd
+#thingy_DBD += drvAsynIPPort.dbd
 thingy_DBD += bluetooth.dbd
 
 # thingy_registerRecordDeviceDriver.cpp derives from thingy.dbd
@@ -25,7 +25,7 @@ thingy_SRCS += bluetooth.c
 thingy_SRCS_DEFAULT += bluetoothMain.cpp
 
 # Link in the code from the support library
-thingy_LIBS += asyn
+#thingy_LIBS += asyn
 
 # Finally link to the EPICS Base libraries
 thingy_LIBS += $(EPICS_BASE_IOC_LIBS)
