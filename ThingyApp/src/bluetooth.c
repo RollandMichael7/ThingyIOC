@@ -233,6 +233,7 @@ static void writePV_callback(const uuid_t *uuidObject, const uint8_t *data, size
 		char buf[300];
 		memset(buf, 0, sizeof(buf));
 		int i=0;
+		// create rotation matrix in text form
 		while (i < (18-1)) {
 			// 2Q14 fixed point
 			int16_t raw = (data[i]) | (data[i+1] << 8);
@@ -255,7 +256,9 @@ static void writePV_callback(const uuid_t *uuidObject, const uint8_t *data, size
 	else if (strcmp(uuid, BATTERY_UUID) == 0) {
 		pv->vala = data[0];
 	}
-	scanOnce(pv);
+
+	if (ioc_started)
+		scanOnce(pv);
 }
 
 
