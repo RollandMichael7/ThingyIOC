@@ -25,36 +25,23 @@
 
 #include "thingy.h"
 
-gatt_connection_t *gatt_connection = 0;
+gatt_connection_t *connection = 0;
 pthread_mutex_t connlock = PTHREAD_MUTEX_INITIALIZER;
 
-#define TEMP_UUID "0201"
-#define PRESSURE_UUID "0202"
-#define HUMIDITY_UUID "0203"
-#define AIRQUAL_UUID "0204"
-#define LIGHT_UUID "0205"
-#define LED_UUID "0301"
-#define BUTTON_UUID "0302"
-#define TAP_UUID "0402"
-#define ORIENTATION_UUID "0403"
-#define QUATERNION_UUID "0404"
-#define STEP_UUID "0405"
-#define RAWMOTION_UUID "0406"
-#define EULER_UUID "0407"
-#define ROTATION_UUID "0408"
-#define HEADING_UUID "0409"
-#define GRAVITY_UUID "040A"
-#define BATTERY_UUID "180F"
+// flag for determining whether the Thingy is connected
+static int alive;
+static int dead;
+// flag for determining if the watchdog thread started
+static int watching;
+static void watchdog();
+// flag for determining if notifications have started
+// (to avoid false disconnections)
+static int started;
 
-#define LED_OFF 0
-#define LED_CONSTANT 1
-#define LED_BREATHE 2
-#define LED_ONCE 3
+static void disconnect();
 
 static char *led_colors[7] = {"Red", "Green", "Yellow", "Blue", "Purple", "Cyan", "White"};
 static char *tap_directions[6] = {"+X", "-X", "+Y", "-Y", "+Z", "-Z"};
-
-static void disconnect();
 
 // data for notification threads
 typedef struct {
@@ -73,40 +60,65 @@ NotificationNode *firstNode = 0;
 
 // TODO: protect connection with lock without making everything hang
 static gatt_connection_t *get_connection() {
-	if (gatt_connection != 0) {
-		return gatt_connection;
+	if (connection != 0) {
+		return connection;
 	}
 	//pthread_mutex_lock(&connlock);
-	if (gatt_connection != 0) {
+	if (connection != 0) {
 		//pthread_mutex_unlock(&connlock);
-		return gatt_connection;
+		return connection;
 	}
 	//printf("Connecting to device %s...\n", mac_address);
-	gatt_connection = gattlib_connect(NULL, mac_address, BDADDR_LE_PUBLIC, BT_SEC_LOW, 0, 0);
+	connection = gattlib_connect(NULL, mac_address, BDADDR_LE_PUBLIC, BT_SEC_LOW, 0, 0);
+	// start watchdog thread
+	if (watching == 0) {
+		pthread_t pid;
+		pthread_create(&pid, NULL, &watchdog, NULL);
+		watching = 1;
+	}
+	alive = 1;
 	signal(SIGINT, disconnect);
 	//pthread_mutex_unlock(&connlock);
 	//printf("Connected.\n");
-	return gatt_connection;
+	return connection;
 }
 
 static void disconnect() {
-	gatt_connection_t *conn = gatt_connection;
+	started = 0;
 	printf("Stopping notifications...\n");
 	if (firstNode != 0) {
 		NotificationNode *curr = firstNode; 
 		NotificationNode *next;
 		while (curr->next != 0) {
 			next = curr->next;
-			gattlib_notification_stop(conn, curr->uuid);
+			gattlib_notification_stop(connection, curr->uuid);
 			free(curr);
 			curr = next;
 		}
-		gattlib_notification_stop(conn, curr->uuid);
+		gattlib_notification_stop(connection, curr->uuid);
 		free(curr);
 	}
-	gattlib_disconnect(conn);
+	gattlib_disconnect(connection);
 	printf("Disconnected from device.\n");
 	exit(1);
+}
+
+// thread function to ensure the Thingy is connected and attempt reconnection if necessary
+static void watchdog() {
+	while(1) {
+		if (started && alive == 0) {
+			dead = 1;
+			printf("ERROR: Lost connection to Thingy\n");
+			printf("Attempting reconnection...\n");
+			connection = 0;
+			get_connection();
+			if (connection == 0) {
+				printf("Unable to reconnect. Reattempt in %d seconds\n", WATCHDOG_DELAY);
+			}
+		}
+		alive = 0;
+		sleep(WATCHDOG_DELAY);
+	}
 }
 
 // parse notification and save to PV
@@ -114,6 +126,14 @@ static void writePV_callback(const uuid_t *uuidObject, const uint8_t *data, size
 	NotifyArgs *args = (NotifyArgs *) user_data;
 	aSubRecord *pv = args->pv;
 	char *uuid = args->uuid_str;
+	
+	// confirm thingy is connected
+	if (dead) {
+		printf("Successfully reconnected.\n");
+		dead = 0;
+	}
+	alive = 1;
+	started = 1;
 
 	if (strcmp(uuid, TEMP_UUID) == 0) {
 		float x= data[0] + (float)(data[1]/100.0);
@@ -261,7 +281,6 @@ static void writePV_callback(const uuid_t *uuidObject, const uint8_t *data, size
 		scanOnce(pv);
 }
 
-
 // taken from gattlib; convert string to 128 bit UUID object
 static uint128_t str_to_128t(const char *string) {
 	uint32_t data0, data4;
@@ -309,10 +328,10 @@ static uuid_t thingyUUID(const char *id) {
 
 // thread function to begin listening for UUID notifications from device
 static void *notificationListener(void *vargp) {
+	get_connection();
 	NotifyArgs *args = (NotifyArgs *) vargp;
-	gatt_connection_t *conn = get_connection();
-	gattlib_register_notification(conn, writePV_callback, args);
-	if (gattlib_notification_start(conn, &(args->uuid))) {
+	gattlib_register_notification(connection, writePV_callback, args);
+	if (gattlib_notification_start(connection, &(args->uuid))) {
 		printf("ERROR: Failed to start notifications for UUID %s (pv %s)\n", args->uuid_str, args->pv->name);
 		free(args);
 		return;
@@ -374,7 +393,7 @@ static long readUUID(aSubRecord *pv) {
 	}
 	else
 		uuid = thingyUUID(input);
-	gatt_connection_t *conn = get_connection();
+	get_connection();
 
 	int i;
 	char byte[4];
@@ -382,7 +401,7 @@ static long readUUID(aSubRecord *pv) {
 	char out_buf[100];
 	memset(out_buf, 0, sizeof(out_buf));
 	size_t len = sizeof(data);
-	if (gattlib_read_char_by_uuid(conn, &uuid, data, &len) == -1) {
+	if (gattlib_read_char_by_uuid(connection, &uuid, data, &len) == -1) {
 		printf("Read of uuid %s (pv %s) failed.\n", input, pv->name);
 		return 1;
 	}
