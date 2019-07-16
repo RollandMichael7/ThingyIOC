@@ -1,5 +1,5 @@
-// Delay (in seconds) between connection checks
-#define WATCHDOG_DELAY 2
+// Delay (in seconds) between reconnection attempts
+#define RECONNECT_DELAY 2
 
 // UUIDs for Thingy sensors
 #define TEMP_UUID "0201"

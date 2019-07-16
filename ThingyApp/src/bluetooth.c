@@ -29,14 +29,10 @@ gatt_connection_t *connection = 0;
 pthread_mutex_t connlock = PTHREAD_MUTEX_INITIALIZER;
 
 // flag for determining whether the Thingy is connected
-static int alive;
-static int dead;
-// flag for determining if the watchdog thread started
+static int broken_conn;
+// flag for determining if the reconnect thread started
 static int watching;
-static void watchdog();
-// flag for determining if notifications have started
-// (to avoid false disconnections)
-static int started;
+static void reconnect();
 
 static void disconnect();
 
@@ -58,6 +54,11 @@ typedef struct {
 
 NotificationNode *firstNode = 0;
 
+static void disconnect_handler() {
+	printf("WARNING: Connection to thingy lost.\n");
+	broken_conn = 1;
+}
+
 // TODO: protect connection with lock without making everything hang
 static gatt_connection_t *get_connection() {
 	if (connection != 0) {
@@ -71,15 +72,15 @@ static gatt_connection_t *get_connection() {
 	//printf("Connecting to device %s...\n", mac_address);
 	connection = gattlib_connect(NULL, mac_address, GATTLIB_CONNECTION_OPTIONS_LEGACY_BDADDR_LE_PUBLIC | GATTLIB_CONNECTION_OPTIONS_LEGACY_BT_SEC_LOW);
 
-	// start watchdog thread
+	// start reconnect thread
 	pthread_mutex_lock(&connlock);
 	if (watching == 0) {
 		pthread_t pid;
-		pthread_create(&pid, NULL, &watchdog, NULL);
+		pthread_create(&pid, NULL, &reconnect, NULL);
+		gattlib_register_on_disconnect(connection, disconnect_handler, NULL);
 		watching = 1;
 	}
 	pthread_mutex_unlock(&connlock);
-	alive = 1;
 	signal(SIGINT, disconnect);
 	//pthread_mutex_unlock(&connlock);
 	//printf("Connected.\n");
@@ -87,41 +88,39 @@ static gatt_connection_t *get_connection() {
 }
 
 static void disconnect() {
-	started = 0;
-	printf("Stopping notifications...\n");
-	if (firstNode != 0) {
-		NotificationNode *curr = firstNode; 
-		NotificationNode *next;
-		while (curr->next != 0) {
-			next = curr->next;
+	if (broken_conn == 0) {
+		printf("Stopping notifications...\n");
+		if (firstNode != 0) {
+			NotificationNode *curr = firstNode; 
+			NotificationNode *next;
+			while (curr->next != 0) {
+				next = curr->next;
+				gattlib_notification_stop(connection, curr->uuid);
+				free(curr);
+				curr = next;
+			}
 			gattlib_notification_stop(connection, curr->uuid);
 			free(curr);
-			curr = next;
 		}
-		gattlib_notification_stop(connection, curr->uuid);
-		free(curr);
+		gattlib_disconnect(connection);
+		printf("Disconnected from device.\n");
 	}
-	gattlib_disconnect(connection);
-	printf("Disconnected from device.\n");
 	exit(1);
 }
 
-// thread function to ensure the Thingy is connected and attempt reconnection if necessary
-static void watchdog() {
-	printf("Watchdog thread started\n");
+// thread function to attempt reconnection upon disconnect
+static void reconnect() {
+	printf("reconnect thread started\n");
 	while(1) {
-		if (started && alive == 0) {
-			dead = 1;
-			printf("ERROR: Lost connection to Thingy\n");
-			printf("Attempting reconnection...\n");
+		if (broken_conn) {
+			printf("Attempting reconnection to device %s...\n", mac_address);
 			connection = 0;
 			get_connection();
 			if (connection == 0) {
-				printf("Unable to reconnect. Reattempt in %d seconds\n", WATCHDOG_DELAY);
+				printf("Unable to reconnect. Reattempt in %d seconds\n", RECONNECT_DELAY);
 			}
 		}
-		alive = 0;
-		sleep(WATCHDOG_DELAY);
+		sleep(RECONNECT_DELAY);
 	}
 }
 
@@ -132,12 +131,10 @@ static void writePV_callback(const uuid_t *uuidObject, const uint8_t *data, size
 	char *uuid = args->uuid_str;
 	
 	// confirm thingy is connected
-	if (dead) {
+	if (broken_conn) {
 		printf("Successfully reconnected.\n");
-		dead = 0;
+		broken_conn = 0;
 	}
-	alive = 1;
-	started = 1;
 
 	if (strcmp(uuid, TEMP_UUID) == 0) {
 		float x= data[0] + (float)(data[1]/100.0);
@@ -393,6 +390,8 @@ static long subscribeUUID(aSubRecord *pv) {
 }
 
 static long readUUID(aSubRecord *pv) {
+	if (broken_conn)
+		return 1;
 	char input[40];
 	strcpy(input, pv->a);
 	strcat(input, pv->b);
