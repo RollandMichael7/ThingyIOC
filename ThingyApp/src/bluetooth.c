@@ -69,13 +69,16 @@ static gatt_connection_t *get_connection() {
 		return connection;
 	}
 	//printf("Connecting to device %s...\n", mac_address);
-	connection = gattlib_connect(NULL, mac_address, BDADDR_LE_PUBLIC, BT_SEC_LOW, 0, 0);
+	connection = gattlib_connect(NULL, mac_address, GATTLIB_CONNECTION_OPTIONS_LEGACY_BDADDR_LE_PUBLIC | GATTLIB_CONNECTION_OPTIONS_LEGACY_BT_SEC_LOW);
+
 	// start watchdog thread
+	pthread_mutex_lock(&connlock);
 	if (watching == 0) {
 		pthread_t pid;
 		pthread_create(&pid, NULL, &watchdog, NULL);
 		watching = 1;
 	}
+	pthread_mutex_unlock(&connlock);
 	alive = 1;
 	signal(SIGINT, disconnect);
 	//pthread_mutex_unlock(&connlock);
@@ -105,6 +108,7 @@ static void disconnect() {
 
 // thread function to ensure the Thingy is connected and attempt reconnection if necessary
 static void watchdog() {
+	printf("Watchdog thread started\n");
 	while(1) {
 		if (started && alive == 0) {
 			dead = 1;
@@ -357,6 +361,7 @@ static void *notificationListener(void *vargp) {
 static long subscribeUUID(aSubRecord *pv) {
 	char input[40];
 	char *b = pv->b;
+	uuid_t uuid;
 	// convert decimal to hex
 	if (strlen(b) > 3) {
 		int len = strlen(b)-2;
@@ -371,7 +376,13 @@ static long subscribeUUID(aSubRecord *pv) {
 	}
 	strcpy(input, pv->a);
 	strcat(input, b);
-	uuid_t uuid = thingyUUID(input);
+	// battery is a 16 bit UUID for some reason
+	if (strcmp(input, "0180F") == 0) {
+		uuid_t batt = CREATE_UUID16(0x2A19);
+		uuid = batt;
+	}
+	else
+		uuid = thingyUUID(input);
 	NotifyArgs *args = malloc(sizeof(NotifyArgs));
 	args->uuid = uuid;
 	args->pv = pv;
@@ -395,39 +406,35 @@ static long readUUID(aSubRecord *pv) {
 		uuid = thingyUUID(input);
 	get_connection();
 
-	int i;
 	char byte[4];
-	char data[100];
-	char out_buf[100];
-	memset(out_buf, 0, sizeof(out_buf));
-	size_t len = sizeof(data);
-	if (gattlib_read_char_by_uuid(connection, &uuid, data, &len) == -1) {
+	uint8_t *data;
+	size_t len;
+	if (gattlib_read_char_by_uuid(connection, &uuid, &data, &len)) {
 		printf("Read of uuid %s (pv %s) failed.\n", input, pv->name);
 		return 1;
 	}
 	else {
 		if (strcmp(input, "018015") == 0) {
-			int level = data[0];
 			char buf[5];
-			snprintf(buf, sizeof(buf), "%d%%", level);
+			snprintf(buf, sizeof(buf), "%d%%", data);
 			strncpy(pv->vala, buf, strlen(buf));
 		}
 		else if (strcmp(input, LED_UUID) == 0) {
-			int mode = (int) data[0];
+			uint8_t mode = data[0];
 			if (mode == LED_OFF) {
 				char buf[4] = "Off";
 				strncpy(pv->vala, buf, strlen(buf));
 			}
 			else if (mode == LED_CONSTANT) {
-				uint8_t red = (uint8_t) data[1];
-				uint8_t green = (uint8_t) data[2];
-				uint8_t blue = (uint8_t) data[3];
+				uint8_t red = data[1];
+				uint8_t green = data[2];
+				uint8_t blue = data[3];
 				char buf[25];
 				snprintf(buf, sizeof(buf), "Constant R%dG%dB%d", red, green, blue);
 				strncpy(pv->vala, buf, strlen(buf));
 			}
 			else if (mode == LED_BREATHE) {
-				int i = (int) data[1];
+				uint8_t i = data[1];
 				char color[10];
 				strcpy(color, led_colors[i-1]);
 				int intensity = (int) data[2];
@@ -447,13 +454,16 @@ static long readUUID(aSubRecord *pv) {
 				printf("LED undefined reading\n");
 		}
 		else {
-			for (i=0; i < len; i++) {
+			char out_buf[100];
+			memset(out_buf, 0, sizeof(out_buf));
+			for (int i=0; i < len; i++) {
 				snprintf(byte, sizeof(byte), "%02x ", data[i]);
 				strcat(out_buf, byte);
 			}
 			//printf("%s\n", out_buf);
 			strncpy(pv->vala, out_buf, strlen(out_buf));
 		}
+		//free(data);
 	}
 	return 0;
 }
