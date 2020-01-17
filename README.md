@@ -3,7 +3,7 @@
 Author: Michael Rolland  
 Corresponding Author: Kazimierz Gofron  
 Created: March 8, 2019  
-Last Updated: July 16, 2020   
+Last Updated: July 16, 2019   
 Copyright (c): 2019 Brookhaven National Laboratory  
 
 **An EPICS IOC for the Nordic Thingy:52**
